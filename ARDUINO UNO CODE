@@ -1,0 +1,94 @@
+#include <DHT.h>
+#include <SoftwareSerial.h>
+
+// Define sensor pins
+#define DHTPIN 2        // Pin where the DHT11 is connected
+#define DHTTYPE DHT11   // Define the type of DHT sensor used
+#define MOISTUREPIN A0  // Analog pin for the moisture sensor
+
+// Define motor pin
+#define MOTORPIN 7      // Digital pin to control the relay (and thus the motor)
+
+// Initialize DHT sensor
+DHT dht(DHTPIN, DHTTYPE);
+
+// Initialize software serial for GSM module
+SoftwareSerial gsm(9, 10); // RX, TX
+
+void setup() {
+  // Initialize serial communication
+  Serial.begin(9600);
+  
+  // Initialize the GSM module
+  gsm.begin(9600);
+  
+  // Initialize the motor pin as output
+  pinMode(MOTORPIN, OUTPUT);
+  
+  // Initialize the DHT sensor
+  dht.begin();
+  
+  // Set up the GSM module
+  gsm.println("AT");                  // Check GSM connection
+  delay(1000);
+  gsm.println("AT+CMGF=1");           // Set SMS mode to text
+  delay(1000);
+  gsm.println("AT+CSCS=\"GSM\"");     // Set character set
+  delay(1000);
+}
+
+void loop() {
+  // Read temperature and humidity from DHT11 sensor
+  float temperature = dht.readTemperature();
+  float humidity = dht.readHumidity();
+  
+  // Read moisture level from the sensor
+  int moistureLevel = analogRead(MOISTUREPIN);
+
+  // Display the sensor readings
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" °C, Humidity: ");
+  Serial.print(humidity);
+  Serial.print(" %, Moisture: ");
+  Serial.println(moistureLevel);
+
+  // Control logic to turn the motor on or off
+  if (temperature > 30 || humidity < 60 || moistureLevel < 400) {
+    digitalWrite(MOTORPIN, HIGH);  // Turn the motor ON
+    Serial.println("Motor ON");
+    
+    // Send SMS alert
+    sendSMS(temperature, humidity, moistureLevel, true);
+  } else {
+    digitalWrite(MOTORPIN, LOW);   // Turn the motor OFF
+    Serial.println("Motor OFF");
+    
+    // Send SMS alert
+    sendSMS(temperature, humidity, moistureLevel, false);
+  }
+  
+  // Wait for a while before the next reading
+  delay(20000);  // Check every 20 seconds
+}
+
+void sendSMS(float temperature, float humidity, int moisture, bool motorStatus) {
+  // Set the recipient number
+  gsm.println("AT+CMGS=\"+91XXXXXXXXXX\"");  // Replace XXXXXXXXXX with the recipient's phone number
+  delay(1000);
+  
+  // Compose the message
+  String sms = "Alert!\n";
+  sms += "Temperature: " + String(temperature) + " °C\n";
+  sms += "Humidity: " + String(humidity) + " %\n";
+  sms += "Moisture: " + String(moisture) + "\n";
+  sms += "Motor Status: " + String(motorStatus ? "ON" : "OFF") + "\n";
+  
+  // Send the message
+  gsm.println(sms);
+  delay(1000);
+  
+  // End the message with a Ctrl+Z
+  gsm.write(26);
+  delay(5000);  // Wait for the message to send
+}
